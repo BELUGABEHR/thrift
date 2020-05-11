@@ -19,8 +19,9 @@
 
 package org.apache.thrift.meta_data;
 
-import java.util.HashMap;
 import java.util.Map;
+import java.util.concurrent.ConcurrentHashMap;
+
 import org.apache.thrift.TBase;
 import org.apache.thrift.TFieldIdEnum;
 
@@ -33,19 +34,15 @@ public class FieldMetaData implements java.io.Serializable {
   public final String fieldName;
   public final byte requirementType;
   public final FieldValueMetaData valueMetaData;
-  private static Map<Class<? extends TBase>, Map<? extends TFieldIdEnum, FieldMetaData>> structMap;
-  
-  static {
-    structMap = new HashMap<Class<? extends TBase>, Map<? extends TFieldIdEnum, FieldMetaData>>();
-  }
-  
+  private static Map<Class<? extends TBase>, Map<? extends TFieldIdEnum, FieldMetaData>> structMap = new ConcurrentHashMap<>();
+
   public FieldMetaData(String name, byte req, FieldValueMetaData vMetaData){
     this.fieldName = name;
     this.requirementType = req;
     this.valueMetaData = vMetaData;
   }
-  
-  public static synchronized void addStructMetaDataMap(Class<? extends TBase> sClass, Map<? extends TFieldIdEnum, FieldMetaData> map){
+
+  public static void addStructMetaDataMap(Class<? extends TBase> sClass, Map<? extends TFieldIdEnum, FieldMetaData> map){
     structMap.put(sClass, map);
   }
 
@@ -55,16 +52,13 @@ public class FieldMetaData implements java.io.Serializable {
    *
    * @param sClass The TBase class for which the metadata map is requested
    */
-  public static synchronized Map<? extends TFieldIdEnum, FieldMetaData> getStructMetaDataMap(Class<? extends TBase> sClass){
-    if (!structMap.containsKey(sClass)){ // Load class if it hasn't been loaded
-      try{
-        sClass.newInstance();
-      } catch (InstantiationException e){
-        throw new RuntimeException("InstantiationException for TBase class: " + sClass.getName() + ", message: " + e.getMessage());
-      } catch (IllegalAccessException e){
-        throw new RuntimeException("IllegalAccessException for TBase class: " + sClass.getName() + ", message: " + e.getMessage());
+  public static Map<? extends TFieldIdEnum, FieldMetaData> getStructMetaDataMap(Class<? extends TBase> sClass){
+    return structMap.computeIfAbsent(sClass, key -> {
+      try {
+        return (Map<? extends TFieldIdEnum, FieldMetaData>) sClass.newInstance();
+      } catch (Exception e){
+        throw new RuntimeException("InstantiationException for TBase class: " + sClass.getName(), e);
       }
-    }
-    return structMap.get(sClass);
+    });
   }
 }
